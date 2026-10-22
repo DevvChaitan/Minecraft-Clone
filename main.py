@@ -7,8 +7,8 @@ pyglet.options["debug_gl"] = False
 
 import pyglet.gl as gl
 
-import matrix
 import shader
+import camera
 
 import block_type
 import texture_manager
@@ -22,9 +22,7 @@ class Window(pyglet.window.Window):
 
 		self.texture_manager = texture_manager.Texture_manager(16, 16, 256)
 
-		self.cobblestone = block_type.Block_type(
-			self.texture_manager, "cobblestone", {"all": "cobblestone"}
-		)
+		self.cobblestone = block_type.Block_type(self.texture_manager, "cobblestone", {"all": "cobblestone"})
 		self.grass = block_type.Block_type(
 			self.texture_manager, "grass", {"top": "grass", "bottom": "dirt", "sides": "grass_side"}
 		)
@@ -53,9 +51,7 @@ class Window(pyglet.window.Window):
 		gl.glBufferData(
 			gl.GL_ARRAY_BUFFER,
 			ctypes.sizeof(gl.GLfloat * len(self.grass.vertex_positions)),
-			(gl.GLfloat * len(self.grass.vertex_positions))(
-				*self.grass.vertex_positions
-			),
+			(gl.GLfloat * len(self.grass.vertex_positions))(*self.grass.vertex_positions),
 			gl.GL_STATIC_DRAW,
 		)
 
@@ -71,9 +67,7 @@ class Window(pyglet.window.Window):
 		gl.glBufferData(
 			gl.GL_ARRAY_BUFFER,
 			ctypes.sizeof(gl.GLfloat * len(self.grass.tex_coords)),
-			(gl.GLfloat * len(self.grass.tex_coords))(
-				*self.grass.tex_coords
-			),
+			(gl.GLfloat * len(self.grass.tex_coords))(*self.grass.tex_coords),
 			gl.GL_STATIC_DRAW,
 		)
 
@@ -96,35 +90,34 @@ class Window(pyglet.window.Window):
 		# create shader
 
 		self.shader = shader.Shader("vert.glsl", "frag.glsl")
-		self.shader_matrix_location = self.shader.find_uniform(b"matrix")
 		self.shader_sampler_location = self.shader.find_uniform(b"texture_array_sampler")
 		self.shader.use()
 
-		# create matrices
+		# pyglet stuff
 
-		self.mv_matrix = matrix.Matrix()
-		self.p_matrix = matrix.Matrix()
-
-		self.x = 0
 		pyglet.clock.schedule_interval(self.update, 1.0 / 60)
+		self.mouse_captured = False
+
+		# camera stuff
+
+		self.camera = camera.Camera(self.shader, self.width, self.height)
 
 	def update(self, delta_time):
-		self.x += delta_time
+		if not self.mouse_captured:
+			self.camera.input = [0, 0, 0]
+
+		self.camera.update_camera(delta_time)
 
 	def on_draw(self):
-		self.p_matrix.load_identity()
-		self.p_matrix.perspective(90, float(self.width) / self.height, 0.1, 500)
+		self.camera.update_matrices()
 
-		self.mv_matrix.load_identity()
-		self.mv_matrix.translate(0, 0, -3)
-		self.mv_matrix.rotate_2d(self.x, math.sin(self.x / 3 * 2) / 2)
-
-		mvp_matrix = self.p_matrix * self.mv_matrix
-		self.shader.uniform_matrix(self.shader_matrix_location, mvp_matrix)
+		# bind textures
 
 		gl.glActiveTexture(gl.GL_TEXTURE0)
 		gl.glBindTexture(gl.GL_TEXTURE_2D_ARRAY, self.texture_manager.texture_array)
 		gl.glUniform1i(self.shader_sampler_location, 0)
+
+		# draw stuff
 
 		gl.glEnable(gl.GL_DEPTH_TEST)
 		gl.glClearColor(0.0, 0.0, 0.0, 1.0)
@@ -132,9 +125,65 @@ class Window(pyglet.window.Window):
 
 		gl.glDrawElements(gl.GL_TRIANGLES, len(self.grass.indices), gl.GL_UNSIGNED_INT, None)
 
+	# input functions
+
 	def on_resize(self, width, height):
 		print(f"Resize {width} * {height}")
 		gl.glViewport(0, 0, width, height)
+
+		self.camera.width = width
+		self.camera.height = height
+
+	def on_mouse_press(self, x, y, button, modifiers):
+		self.mouse_captured = not self.mouse_captured
+		self.set_exclusive_mouse(self.mouse_captured)
+
+	def on_mouse_motion(self, x, y, delta_x, delta_y):
+		if self.mouse_captured:
+			sensitivity = 0.004
+
+			self.camera.rotation[0] -= delta_x * sensitivity
+			self.camera.rotation[1] += delta_y * sensitivity
+
+			self.camera.rotation[1] = max(
+				-math.tau / 4, min(math.tau / 4, self.camera.rotation[1])
+			)
+
+	def on_key_press(self, key, modifiers):
+		if not self.mouse_captured:
+			return
+
+		if key == pyglet.window.key.D:
+			self.camera.input[0] += 1
+		elif key == pyglet.window.key.A:
+			self.camera.input[0] -= 1
+		elif key == pyglet.window.key.W:
+			self.camera.input[2] += 1
+		elif key == pyglet.window.key.S:
+			self.camera.input[2] -= 1
+
+		elif key == pyglet.window.key.SPACE:
+			self.camera.input[1] += 1
+		elif key == pyglet.window.key.LSHIFT:
+			self.camera.input[1] -= 1
+
+	def on_key_release(self, key, modifiers):
+		if not self.mouse_captured:
+			return
+
+		if key == pyglet.window.key.D:
+			self.camera.input[0] -= 1
+		elif key == pyglet.window.key.A:
+			self.camera.input[0] += 1
+		elif key == pyglet.window.key.W:
+			self.camera.input[2] -= 1
+		elif key == pyglet.window.key.S:
+			self.camera.input[2] += 1
+
+		elif key == pyglet.window.key.SPACE:
+			self.camera.input[1] -= 1
+		elif key == pyglet.window.key.LSHIFT:
+			self.camera.input[1] += 1
 
 
 class Game:
