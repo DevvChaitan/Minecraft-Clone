@@ -106,6 +106,8 @@ class Window(pyglet.window.Window):
 			self.toast_timer -= delta_time
 
 	def on_draw(self):
+		# 1. Bind our custom 3D world shader and restore 3D states
+		self.shader.use()
 		self.player.update_matrices()
 
 		# Bind texture array
@@ -113,9 +115,11 @@ class Window(pyglet.window.Window):
 		gl.glBindTexture(gl.GL_TEXTURE_2D_ARRAY, self.world.texture_manager.texture_array)
 		gl.glUniform1i(self.shader_sampler_location, 0)
 
-		# 3D Depth & Face Culling
+		# 3D Depth & Face Culling, disable 2D blend
 		gl.glEnable(gl.GL_DEPTH_TEST)
+		gl.glDepthMask(gl.GL_TRUE)
 		gl.glEnable(gl.GL_CULL_FACE)
+		gl.glDisable(gl.GL_BLEND)
 
 		# Dynamic sky color: underwater blue if submerged, else sky blue daylight
 		if self.player.in_water:
@@ -127,10 +131,16 @@ class Window(pyglet.window.Window):
 		self.world.draw()
 		gl.glFinish()
 
-		# 2D HUD Rendering
+		# 2. 2D HUD Rendering (switches to Pyglet internal 2D shader)
 		self.draw_hud()
 
 	def draw_hud(self):
+		# Configure 2D HUD states
+		gl.glDisable(gl.GL_DEPTH_TEST)
+		gl.glDisable(gl.GL_CULL_FACE)
+		gl.glEnable(gl.GL_BLEND)
+		gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
+
 		# Crosshair at center
 		self.crosshair.x = self.width // 2
 		self.crosshair.y = self.height // 2
