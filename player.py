@@ -36,7 +36,6 @@ class Player(entity.Entity):
 
 		if delta_time * 20 > 1:
 			self.speed = self.target_speed
-
 		else:
 			self.speed += (self.target_speed - self.speed) * delta_time * 20
 
@@ -51,8 +50,14 @@ class Player(entity.Entity):
 			self.accel[0] = math.cos(angle) * multiplier
 			self.accel[2] = math.sin(angle) * multiplier
 
-		if not self.flying and self.input[1] > 0:
-			self.jump()
+		if not self.flying:
+			if self.in_water:
+				if self.input[1] > 0:
+					self.velocity[1] = max(self.velocity[1], 4.5)
+				elif self.input[1] < 0:
+					self.velocity[1] = min(self.velocity[1], -4.0)
+			elif self.input[1] > 0:
+				self.jump()
 
 		# process physics & collisions &c
 

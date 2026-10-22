@@ -75,30 +75,45 @@ class Subchunk:
 
 						def can_render_face(position):
 							if not self.world.is_opaque_block(position):
-								if block_type.glass and self.world.get_block_number(position) == block_number:
-									return False
+								neighbor_num = self.world.get_block_number(position)
+								if block_type.glass:
+									if neighbor_num == block_number:
+										return False
+									if block_number in (8, 9) and neighbor_num in (8, 9):
+										return False
+									if block_number in (10, 11) and neighbor_num in (10, 11):
+										return False
 
 								return True
 
 							return False
 
-						# if block is cube, we want it to check neighbouring blocks so that we don't uselessly render faces
-						# if block isn't a cube, we just want to render all faces, regardless of neighbouring blocks
-						# since the vast majority of blocks are probably anyway going to be cubes, this won't impact performance all that much; the amount of useless faces drawn is going to be minimal
-
 						if block_type.is_cube:
+							is_liquid = len(block_type.vertex_positions) == 12
 							if can_render_face((x + 1, y, z)):
 								add_face(0)
+								if is_liquid:
+									add_face(6)
 							if can_render_face((x - 1, y, z)):
 								add_face(1)
+								if is_liquid:
+									add_face(7)
 							if can_render_face((x, y + 1, z)):
 								add_face(2)
+								if is_liquid:
+									add_face(8)
 							if can_render_face((x, y - 1, z)):
 								add_face(3)
+								if is_liquid:
+									add_face(9)
 							if can_render_face((x, y, z + 1)):
 								add_face(4)
+								if is_liquid:
+									add_face(10)
 							if can_render_face((x, y, z - 1)):
 								add_face(5)
+								if is_liquid:
+									add_face(11)
 
 						else:
 							for i in range(len(block_type.vertex_positions)):

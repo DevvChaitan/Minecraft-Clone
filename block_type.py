@@ -1,37 +1,27 @@
 import collider
 
-import models.cube  # default model
+import models.cube
 
 
 class Block_type:
-	# new optional model argument (cube model by default)
 	def __init__(self, texture_manager, name="unknown", block_face_textures={"all": "cobblestone"}, model=models.cube):
 		self.name = name
 		self.block_face_textures = block_face_textures
 		self.model = model
 
-		# create members based on model attributes
-
 		self.transparent = model.transparent
 		self.is_cube = model.is_cube
 		self.glass = model.glass
 
-		# create colliders
-
 		self.colliders = []
-
 		for _collider in model.colliders:
 			self.colliders.append(collider.Collider(*_collider))
-
-		# replace data contained in numbers.py with model specific data
 
 		self.vertex_positions = model.vertex_positions
 		self.tex_coords = model.tex_coords.copy()
 		self.shading_values = model.shading_values
 
 		def set_block_face(face, texture):
-			# make sure we don't add nonexistent faces
-
 			if face > len(self.tex_coords) - 1:
 				return
 
@@ -39,6 +29,13 @@ class Block_type:
 
 			for vertex in range(4):
 				self.tex_coords[face][vertex * 3 + 2] = texture
+
+			# If two-sided (like liquid with 12 faces), also assign matching inward face
+			if len(self.tex_coords) == 12 and face < 6:
+				inward_face = face + 6
+				self.tex_coords[inward_face] = self.tex_coords[inward_face].copy()
+				for vertex in range(4):
+					self.tex_coords[inward_face][vertex * 3 + 2] = texture
 
 		for face in block_face_textures:
 			texture = block_face_textures[face]
@@ -69,4 +66,6 @@ class Block_type:
 				set_block_face(5, texture_index)
 
 			else:
-				set_block_face(["right", "left", "top", "bottom", "front", "back"].index(face), texture_index)
+				faces_list = ["right", "left", "top", "bottom", "front", "back"]
+				if face in faces_list:
+					set_block_face(faces_list.index(face), texture_index)

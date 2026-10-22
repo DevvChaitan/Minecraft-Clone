@@ -3,10 +3,12 @@ import collider
 
 FLYING_ACCEL = (0, 0, 0)
 GRAVITY_ACCEL = (0, -32, 0)
+WATER_GRAVITY = (0, -4, 0)
 
-# these values all come (losely) from Minecraft, but are multiplied by 20 (since Minecraft runs at 20 TPS)
+# these values all come (loosely) from Minecraft, but are multiplied by 20 (since Minecraft runs at 20 TPS)
 
 FRICTION = (20, 20, 20)
+WATER_FRICTION = (8, 8, 8)
 
 DRAG_FLY = (5, 5, 5)
 DRAG_JUMP = (1.8, 0, 1.8)
@@ -36,6 +38,13 @@ class Entity:
 		self.collider = collider.Collider()
 		self.grounded = False
 
+	@property
+	def in_water(self):
+		head_pos = (int(round(self.position[0])), int(round(self.position[1] + self.height * 0.8)), int(round(self.position[2])))
+		feet_pos = (int(round(self.position[0])), int(round(self.position[1] + 0.1)), int(round(self.position[2])))
+		return (self.world.get_block_number(head_pos) in (8, 9) or 
+		        self.world.get_block_number(feet_pos) in (8, 9))
+
 	def update_collider(self):
 		x, y, z = self.position
 
@@ -53,9 +62,12 @@ class Entity:
 		self.velocity = [0, 0, 0]  # to prevent collisions
 
 	def jump(self, height=None):
-		# obviously, we can't initiate a jump while in mid-air
+		# can't jump while in mid-air unless in water
+		if not self.grounded and not self.in_water:
+			return
 
-		if not self.grounded:
+		if self.in_water:
+			self.velocity[1] = 4.0
 			return
 
 		if height is None:
@@ -67,10 +79,10 @@ class Entity:
 	def friction(self):
 		if self.flying:
 			return DRAG_FLY
-
+		elif self.in_water:
+			return WATER_FRICTION
 		elif self.grounded:
 			return FRICTION
-
 		elif self.velocity[1] > 0:
 			return DRAG_JUMP
 
@@ -150,12 +162,24 @@ class Entity:
 
 		# apply gravity acceleration
 
-		gravity = FLYING_ACCEL if self.flying else GRAVITY_ACCEL
+		if self.flying:
+			gravity = FLYING_ACCEL
+		elif self.in_water:
+			gravity = WATER_GRAVITY
+			if self.velocity[1] < -4.0:
+				self.velocity[1] = -4.0
+		else:
+			gravity = GRAVITY_ACCEL
+
 		self.velocity = [v + a * delta_time for v, a in zip(self.velocity, gravity)]
 
 		# apply friction/drag
 
 		self.velocity = [v - min(v * f * delta_time, v, key=abs) for v, f in zip(self.velocity, self.friction)]
+
+		# void protection: if fallen below world limit, respawn back onto surface
+		if self.position[1] < -10:
+			self.teleport((0, 80, 0))
 
 		# make sure we can rely on the entity's collider outside of this function
 

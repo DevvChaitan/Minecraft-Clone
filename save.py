@@ -25,7 +25,7 @@ class Save:
 			chunk_blocks = nbt.load(chunk_path)["Level"]["Blocks"]
 
 		except FileNotFoundError:
-			return
+			return False
 
 		self.world.chunks[chunk_position] = chunk.Chunk(self.world, chunk_position)
 
@@ -35,6 +35,8 @@ class Save:
 					self.world.chunks[chunk_position].blocks[x][y][z] = chunk_blocks[
 						x * chunk.CHUNK_LENGTH * chunk.CHUNK_HEIGHT + z * chunk.CHUNK_HEIGHT + y
 					]
+
+		return True
 
 	def save_chunk(self, chunk_position):
 		x, y, z = chunk_position
@@ -63,18 +65,18 @@ class Save:
 		chunk_data.save(chunk_path, gzipped=True)
 
 	def load(self):
-		# Target hardware sweet spot: 16 render chunks (4x4 grid) for high FPS
+		# Initial center spawn chunks (4x4)
 		for x in range(-2, 2):
-			for y in range(-2, 2):
-				self.load_chunk((x, 0, y))
+			for z in range(-2, 2):
+				self.load_chunk((x, 0, z))
 
 	def save(self):
 		for chunk_position in self.world.chunks:
 			if chunk_position[1] != 0:
 				continue
 
-			chunk = self.world.chunks[chunk_position]
+			chunk_obj = self.world.chunks[chunk_position]
 
-			if chunk.modified:
+			if chunk_obj.modified:
 				self.save_chunk(chunk_position)
-				chunk.modified = False
+				chunk_obj.modified = False

@@ -23,19 +23,15 @@ class World:
 		blocks_data_file.close()
 
 		for block in blocks_data:
-			if block[0] in ["\n", "#"]:  # skip if empty line or comment
+			if block[0] in ["\n", "#"]:
 				continue
 
 			number, props = block.split(":", 1)
 			number = int(number)
 
-			# default block
-
 			name = "Unknown"
 			model = models.cube
 			texture = {"all": "unknown"}
-
-			# read properties
 
 			for prop in props.split(","):
 				prop = prop.strip()
@@ -58,13 +54,10 @@ class World:
 				elif prop[0] == "model":
 					model = eval(prop[1])
 
-			# add block type
-
 			_block_type = block_type.Block_type(self.texture_manager, name, texture, model)
 
 			if number < len(self.block_types):
 				self.block_types[number] = _block_type
-
 			else:
 				self.block_types.append(_block_type)
 
@@ -73,17 +66,79 @@ class World:
 		# load the world
 
 		self.save = save.Save(self)
-
 		self.chunks = {}
 		self.save.load()
 
-		for chunk_position in self.chunks:
+		for chunk_position in list(self.chunks.keys()):
 			self.chunks[chunk_position].update_subchunk_meshes()
 			self.chunks[chunk_position].update_mesh()
 
+		# Load queue for all remaining chunks from the 8x8 saved map (-4..3)
+		self.load_queue = []
+		for x in range(-4, 4):
+			for z in range(-4, 4):
+				pos = (x, 0, z)
+				if pos not in self.chunks:
+					self.load_queue.append(pos)
+
+	def generate_procedural_chunk(self, chunk_position):
+		cx, cy, cz = chunk_position
+		if cy != 0:
+			return None
+
+		new_chunk = chunk.Chunk(self, chunk_position)
+
+		for lx in range(chunk.CHUNK_WIDTH):
+			wx = cx * chunk.CHUNK_WIDTH + lx
+			for lz in range(chunk.CHUNK_LENGTH):
+				wz = cz * chunk.CHUNK_LENGTH + lz
+
+				h = int(32 + 8 * math.sin(wx * 0.04) * math.cos(wz * 0.04) + 4 * math.sin((wx + wz) * 0.07))
+				h = max(10, min(chunk.CHUNK_HEIGHT - 10, h))
+
+				for y in range(h + 1):
+					if y == 0:
+						new_chunk.blocks[lx][y][lz] = 7  # bedrock
+					elif y < h - 4:
+						new_chunk.blocks[lx][y][lz] = 1  # stone
+					elif y < h:
+						new_chunk.blocks[lx][y][lz] = 3  # dirt
+					else:
+						new_chunk.blocks[lx][y][lz] = 12 if h <= 28 else 2  # sand or grass
+
+				# Water level up to 28
+				for y in range(h + 1, 29):
+					new_chunk.blocks[lx][y][lz] = 9  # stationary water
+
+		return new_chunk
+
+	def process_chunk_queue(self):
+		# Process up to 2 queued chunks per tick for smooth streaming
+		for _ in range(2):
+			if not self.load_queue:
+				break
+
+			pos = self.load_queue.pop(0)
+			loaded = self.save.load_chunk(pos)
+			if not loaded:
+				# Generate procedural chunk if not in save file
+				gen_chunk = self.generate_procedural_chunk(pos)
+				if gen_chunk:
+					self.chunks[pos] = gen_chunk
+
+			if pos in self.chunks:
+				self.chunks[pos].update_subchunk_meshes()
+				self.chunks[pos].update_mesh()
+
+				# update neighbor chunks at border to cull border faces
+				cx, cy, cz = pos
+				for n_pos in [(cx + 1, cy, cz), (cx - 1, cy, cz), (cx, cy, cz + 1), (cx, cy, cz - 1)]:
+					if n_pos in self.chunks:
+						self.chunks[n_pos].update_subchunk_meshes()
+						self.chunks[n_pos].update_mesh()
+
 	def get_chunk_position(self, position):
 		x, y, z = position
-
 		return (
 			math.floor(x / chunk.CHUNK_WIDTH),
 			math.floor(y / chunk.CHUNK_HEIGHT),
@@ -92,7 +147,6 @@ class World:
 
 	def get_local_position(self, position):
 		x, y, z = position
-
 		return (int(x % chunk.CHUNK_WIDTH), int(y % chunk.CHUNK_HEIGHT), int(z % chunk.CHUNK_LENGTH))
 
 	def get_block_number(self, position):
@@ -103,32 +157,24 @@ class World:
 			return 0
 
 		lx, ly, lz = self.get_local_position(position)
-
-		block_number = self.chunks[chunk_position].blocks[lx][ly][lz]
-		return block_number
+		return self.chunks[chunk_position].blocks[lx][ly][lz]
 
 	def is_opaque_block(self, position):
-		# get block type and check if it's opaque or not
-		# air counts as a transparent block, so test for that too
-
-		block_type = self.block_types[self.get_block_number(position)]
-
-		if not block_type:
+		block_type_obj = self.block_types[self.get_block_number(position)]
+		if not block_type_obj:
 			return False
+		return not block_type_obj.transparent
 
-		return not block_type.transparent
-
-	def set_block(self, position, number):  # set number to 0 (air) to remove block
+	def set_block(self, position, number):
 		x, y, z = position
 		chunk_position = self.get_chunk_position(position)
 
-		if chunk_position not in self.chunks:  # if no chunks exist at this position, create a new one
+		if chunk_position not in self.chunks:
 			if number == 0:
-				return  # no point in creating a whole new chunk if we're not gonna be adding anything
-
+				return
 			self.chunks[chunk_position] = chunk.Chunk(self, chunk_position)
 
-		if self.get_block_number(position) == number:  # no point updating mesh if the block is the same
+		if self.get_block_number(position) == number:
 			return
 
 		lx, ly, lz = self.get_local_position(position)
@@ -141,10 +187,10 @@ class World:
 
 		cx, cy, cz = chunk_position
 
-		def try_update_chunk_at_position(chunk_position, position):
-			if chunk_position in self.chunks:
-				self.chunks[chunk_position].update_at_position(position)
-				self.chunks[chunk_position].update_mesh()
+		def try_update_chunk_at_position(chunk_pos, pos):
+			if chunk_pos in self.chunks:
+				self.chunks[chunk_pos].update_at_position(pos)
+				self.chunks[chunk_pos].update_mesh()
 
 		if lx == chunk.CHUNK_WIDTH - 1:
 			try_update_chunk_at_position((cx + 1, cy, cz), (x + 1, y, z))
@@ -162,12 +208,8 @@ class World:
 			try_update_chunk_at_position((cx, cy, cz - 1), (x, y, z - 1))
 
 	def try_set_block(self, pos, num, collider):
-		# if we're trying to remove a block, whatever let it go through
-
 		if not num:
 			return self.set_block(pos, 0)
-
-		# make sure the block doesn't intersect with the passed collider
 
 		for block_collider in self.block_types[num].colliders:
 			if collider & (block_collider + pos):
