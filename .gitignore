@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.core
+*.log
+.vscode
+*.ogg
+*.sw[nop]
+*.so
+*.c
+*.html
+*.cache
+dist
+build
+*.egg-info
+*.prof
+.venv/
