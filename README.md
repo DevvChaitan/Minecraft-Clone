@@ -1,71 +1,85 @@
-# 3D Minecraft Clone in Python (MCPY)
+# 3D Minecraft Clone in Python
 
-A feature-complete 3D Minecraft Alpha clone written in Python using modern OpenGL via `pyglet`, strictly following the architecture and implementation by obiwac.
-
-![Minecraft Clone Preview](textures/grass.png)
+A feature-complete 3D Minecraft Alpha clone implemented in Python using Modern OpenGL 3.3 Core Profile. Built step-by-step strictly following the low-level graphics pipeline architecture from the reference tutorial series by obiwac.
 
 ---
 
-## Features
+## Overview
 
-- **Modern OpenGL 3.3 Core Profile**: Vertex Array Objects (VAO), Vertex Buffer Objects (VBO), Index Buffer Objects (IBO).
-- **GLSL Shaders**:
-  - `vert.glsl`: 3D MVP matrix transformation, per-face directional ambient shading, texture coordinates.
-  - `frag.glsl`: Texture array sampling with alpha testing (`discard` for transparent textures like plants/saplings).
-- **Texture Arrays & Mipmaps**: 2D Texture Array (`GL_TEXTURE_2D_ARRAY`) packing 256 16×16 textures with nearest-neighbor magnification and mipmap generation.
+This project is a standalone voxel engine and 3D sandbox game replicating core Minecraft Alpha mechanics: procedural block rendering, dynamic chunking, face culling, continuous AABB physics, raycast block modification, and NBT-based world persistence.
+
+---
+
+## Tech Stack & Architecture
+
+| Component | Technology | Purpose |
+|---|---|---|
+| **Language** | Python 3.11 | Core gameplay logic, world generation, and math |
+| **Window & Input** | `pyglet` (2.x) | Cross-platform windowing, OpenGL 3.3 Core context, audio, and event loop |
+| **Graphics API** | OpenGL 3.3 Core Profile (GLSL) | Hardware-accelerated 3D rendering pipeline |
+| **Mathematics** | Custom Matrix engine / `pyglm` | Perspective projections, model-view transformations, vector math |
+| **Data Storage** | `nbtlib` & `base36` | Minecraft Named Binary Tag (NBT) chunk serialization and directory hashing |
+| **Arrays & Buffers** | `ctypes` & `numpy` | Low-level C-compatible memory buffers for VAO / VBO / IBO GPU transfer |
+
+---
+
+## Key Engineering Features
+
+- **Modern OpenGL Pipeline**:
+  - Programmable shaders: `vert.glsl` (MVP transform, per-face directional ambient shading) and `frag.glsl` (2D texture array sampling, alpha discard for transparent foliage).
+  - High-performance 2D Texture Array (`GL_TEXTURE_2D_ARRAY`) bundling 256 16×16 textures into a single GPU binding with nearest-neighbor filtering and mipmapping.
 - **Dynamic Chunking & Face Culling**:
-  - 16×128×16 chunk columns partitioned into 4×4×4 subchunks.
-  - Adjacent face culling (opaque and glass face culling) to only render visible block faces.
-  - Subchunk mesh re-generation on block modification for instant updates.
-- **Raycasting**:
-  - DDA 3D grid raymarching for block picking, breaking, and placing.
-- **Physics & Collision Detection**:
-  - Continuous Swept AABB (Axis-Aligned Bounding Box) collision detection with normal reflection.
-  - Variable speed movement (walking 4.317 m/s, sprinting 7 m/s), jumping (1.25m height), gravity (-32 m/s²), and ground friction / air drag.
-  - Toggleable flying mode (`F`).
-- **NBT Save & Load**:
-  - World chunks serialized in Minecraft's NBT format using `nbtlib` and base-36 chunk hashing.
-
----
-
-## Hardware Spec Tuning
-- **Target Hardware**: Intel Core i5-13450HX | 16 GB DDR5 RAM | NVIDIA GeForce RTX 4050 GPU (6GB VRAM)
-- **Render Distance**: Tuned to a 16-chunk sweet spot (4×4 chunk grid, 128 blocks high) delivering a smooth 60+ FPS without VRAM exhaustion.
+  - Full-height chunk columns (16×128×16) partitioned into 4×4×4 subchunks for localized, zero-lag mesh updates.
+  - Hidden-surface culling: adjacent solid block faces and shared glass/liquid faces are discarded to minimize GPU draw calls.
+  - Dual-sided inward liquid rendering so water bodies remain visible both from surface view and while submerged.
+- **Raycast Block Interaction**:
+  - 3D DDA grid traversal raymarching for voxel selection, mining, and surface-aligned placement.
+- **Continuous Physics & Collisions**:
+  - Swept Axis-Aligned Bounding Box (AABB) collision resolution with surface normal reflection.
+  - Variable player movement states: walking (4.3 m/s), sprinting (7.0 m/s), jumping (1.25 m), gravity (-32 m/s²), water buoyancy/drag, and toggleable flight.
+  - Void fall protection: automatic safe respawn if falling off world boundaries.
+- **In-Game Hotbar & Inventory**:
+  - 9-slot interactive hotbar with instant numeric switching (keys `1`–`9`), mouse wheel cycling, and middle-click block picking.
+  - Broken block drops and inventory count tracking with on-screen HUD toast notifications.
+- **World Persistence**:
+  - Gzipped Minecraft NBT region chunk files (`c.x.z.dat`) with progressive streaming.
 
 ---
 
 ## Controls
 
-| Key / Mouse Action | Action |
-| --- | --- |
+| Input | Action |
+|---|---|
 | **Left Click (Window)** | Capture mouse & look around |
 | **Escape** | Release mouse cursor |
-| **Mouse Move** | Look around (yaw & pitch) |
+| **Mouse Move** | Pitch & Yaw look rotation |
 | **W, A, S, D** | Move Forward, Left, Backward, Right |
-| **Left Ctrl** | Sprint (Field of view expands dynamically) |
-| **Space** | Jump (or Fly Up when flying) |
-| **Left Shift** | Fly Down (when flying) |
-| **F** | Toggle Flying Mode |
-| **Left Click** | Mine / Break targeted block |
-| **Right Click** | Place held block against targeted face |
-| **Middle Click** | Pick block under crosshair |
+| **Left Ctrl** | Sprint (dynamic FOV zoom) |
+| **Space** | Jump (or Swim Up in water / Fly Up in flight mode) |
+| **Left Shift** | Fly Down (while in flight mode) |
+| **F** | Toggle Flying Mode on/off |
+| **1 – 9** | Select Hotbar Slots 1 through 9 |
+| **Mouse Scroll** | Cycle through Hotbar blocks |
+| **Left Click** | Mine / Break targeted block (collects into inventory) |
+| **Right Click** | Place held block on targeted surface |
+| **Middle Click** | Pick targeted block into active hotbar slot |
 | **G** | Randomize held block |
 | **O** | Save modified chunks to disk (NBT) |
-| **R** | Teleport to random spot on world surface |
+| **R** | Teleport to a random surface location |
 
 ---
 
-## Requirements & Running
+## Getting Started
 
-### Dependencies
-- Python 3.10+ (tested on Python 3.11)
-- `pyglet`
-- `pyglm`
-- `nbtlib`
-- `base36`
-- `numpy`
+### 1. Prerequisites
+Ensure Python 3.10+ is installed on your machine.
 
-### Run Game
+### 2. Install Dependencies
+```bash
+pip install pyglet pyglm nbtlib base36 numpy
+```
+
+### 3. Run the Game
 ```bash
 python main.py
 ```
